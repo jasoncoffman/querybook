@@ -62,10 +62,10 @@ class MatchFiltersPartialTestCase(TestCase):
 
     def test_question_mark_is_escaped(self):
         terms = self._filter_terms(
-            [["full_table_name", "*a?b*"]], partial_filter_names=self.PARTIAL
+            [["full_table_name", "*ab?cd*"]], partial_filter_names=self.PARTIAL
         )
         self.assertEqual(
-            terms, [{"wildcard": {"full_table_name": {"value": "*a\\?b*"}}}]
+            terms, [{"wildcard": {"full_table_name": {"value": "*ab\\?cd*"}}}]
         )
 
     def test_not_enabled_for_other_filters(self):
@@ -74,7 +74,7 @@ class MatchFiltersPartialTestCase(TestCase):
 
     def test_too_few_literals_is_not_partial(self):
         # a bare wildcard would scan the whole term dictionary
-        for value in ["*", "**", "*a*", "*.*"]:
+        for value in ["*", "**", "*a*", "*.*", "*ab*", "*a?b*"]:
             terms = self._filter_terms(
                 [["full_table_name", value]], partial_filter_names=self.PARTIAL
             )
@@ -86,9 +86,9 @@ class MatchFiltersPartialTestCase(TestCase):
 
     def test_minimum_literals_is_partial(self):
         terms = self._filter_terms(
-            [["full_table_name", "*ab*"]], partial_filter_names=self.PARTIAL
+            [["full_table_name", "*abc*"]], partial_filter_names=self.PARTIAL
         )
-        self.assertEqual(terms, [{"wildcard": {"full_table_name": {"value": "*ab*"}}}])
+        self.assertEqual(terms, [{"wildcard": {"full_table_name": {"value": "*abc*"}}}])
 
     def test_mixed_list_ands_exact_and_partial(self):
         terms = self._filter_terms(

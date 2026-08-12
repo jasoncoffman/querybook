@@ -17,6 +17,11 @@ import { HoverIconTag } from 'ui/Tag/HoverIconTag';
 
 import './TableSelect.scss';
 
+// Keep in sync with MIN_PARTIAL_FILTER_LITERALS in
+// server/lib/elasticsearch/query_utils.py. Shorter values are ignored by the
+// server, so offering them here would silently return no results.
+const MIN_PARTIAL_NAME_LENGTH = 3;
+
 interface ITableSelectProps {
     tableNames: string[];
     onTableNamesChange: (tableNames: string[]) => void;
@@ -118,7 +123,8 @@ export const TableSelect: React.FunctionComponent<ITableSelectProps> = ({
                               formatCreateLabel: (input: string) =>
                                   `Match table names containing "${input}"`,
                               isValidNewOption: (input: string) =>
-                                  input.trim().length > 0,
+                                  input.trim().length >=
+                                  MIN_PARTIAL_NAME_LENGTH,
                           }
                         : {};
                     return (

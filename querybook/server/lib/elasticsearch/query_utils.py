@@ -32,7 +32,7 @@ def match_any_field(keywords="", search_fields=[]):
 # A partial value must contain at least this many literal characters. Wildcard
 # queries scan the field's term dictionary, so a pattern like "*" alone would
 # match every term for no useful result.
-MIN_PARTIAL_FILTER_LITERALS = 2
+MIN_PARTIAL_FILTER_LITERALS = 3
 
 
 def _is_partial_filter_value(filter_val: str) -> bool:

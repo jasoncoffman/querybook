@@ -30,29 +30,58 @@ def match_any_field(keywords="", search_fields=[]):
 
 
 # A partial value must contain at least this many literal characters. Wildcard
-# queries scan the field's term dictionary, so a pattern like "*" alone would
-# match every term for no useful result.
+# queries scan the field's term dictionary, so a very short pattern would match
+# a large share of it while being too vague to be useful.
 MIN_PARTIAL_FILTER_LITERALS = 3
 
 
+def _split_wildcard_pattern(pattern: str) -> Tuple[bool, str]:
+    """Split a wildcard pattern into whether it has an unescaped operator and the
+    literal text it matches.
+
+    "*" and "?" are operators; "\\*" and "\\?" are the literal characters. Callers
+    that build a pattern from user input escape the input first, so a "*" the user
+    typed never acts as an operator.
+
+    Returns:
+        Tuple[bool, str]: (has an unescaped * or ?, the literal characters)
+    """
+    literals = []
+    has_operator = False
+    i = 0
+    while i < len(pattern):
+        char = pattern[i]
+        if char == "\\" and i + 1 < len(pattern):
+            literals.append(pattern[i + 1])
+            i += 2
+            continue
+        if char in ("*", "?"):
+            has_operator = True
+        else:
+            literals.append(char)
+        i += 1
+    return has_operator, "".join(literals)
+
+
 def _is_partial_filter_value(filter_val: str) -> bool:
-    """Whether a filter value asks for partial matching, indicated by an explicit
-    "*" (e.g. "*world*"). Callers building a value from user input are expected to
-    add the wildcards, so intent is never inferred from the text itself."""
-    if not isinstance(filter_val, str) or "*" not in filter_val:
+    """Whether a filter value is a wildcard pattern rather than an exact value.
+
+    Only an unescaped "*" or "?" makes a value partial, so intent is never
+    inferred from the text itself."""
+    if not isinstance(filter_val, str):
         return False
-    literals = filter_val.replace("*", "").replace("?", "")
-    return len(literals) >= MIN_PARTIAL_FILTER_LITERALS
+    has_operator, literals = _split_wildcard_pattern(filter_val)
+    return has_operator and len(literals) >= MIN_PARTIAL_FILTER_LITERALS
 
 
 def _make_partial_filter(filter_name: str, filter_val: str):
-    """Create a wildcard filter for a partially specified value.
+    """Create a wildcard filter from an already-escaped wildcard pattern.
 
     Wildcard queries are not analyzed, so the value is lowercased here to match
-    the terms produced by the field's case_insensitive normalizer.
+    the terms produced by the field's case_insensitive normalizer. Escapes are
+    preserved, since lowercasing does not affect "\\*" or "\\?".
     """
-    pattern = filter_val.lower().replace("\\", "\\\\").replace("?", "\\?")
-    return {"wildcard": {filter_name: {"value": pattern}}}
+    return {"wildcard": {filter_name: {"value": filter_val.lower()}}}
 
 
 def _make_singular_filter(

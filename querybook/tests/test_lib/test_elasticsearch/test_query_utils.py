@@ -42,7 +42,8 @@ class MatchFiltersPartialTestCase(TestCase):
                 "{} should not become a wildcard".format(value),
             )
 
-    def test_partial_wildcard_is_not_double_wrapped(self):
+    def test_pattern_is_passed_through_unchanged(self):
+        # the caller owns anchoring; match_filters never adds or removes wildcards
         terms = self._filter_terms(
             [["full_table_name", "core.*_v1"]], partial_filter_names=self.PARTIAL
         )
@@ -60,12 +61,29 @@ class MatchFiltersPartialTestCase(TestCase):
             terms, [{"wildcard": {"full_table_name": {"value": "*snapshot*"}}}]
         )
 
-    def test_question_mark_is_escaped(self):
+    def test_escaped_wildcards_are_preserved_and_not_operators(self):
+        # a "*" the caller escaped is a literal character, so it neither acts as
+        # an operator nor counts toward the literal floor
         terms = self._filter_terms(
-            [["full_table_name", "*ab?cd*"]], partial_filter_names=self.PARTIAL
+            [["full_table_name", "*a\\*b\\?c*"]], partial_filter_names=self.PARTIAL
         )
         self.assertEqual(
-            terms, [{"wildcard": {"full_table_name": {"value": "*ab\\?cd*"}}}]
+            terms, [{"wildcard": {"full_table_name": {"value": "*a\\*b\\?c*"}}}]
+        )
+
+    def test_only_escaped_wildcards_is_not_partial(self):
+        # nothing unescaped means the value is literal, not a pattern
+        terms = self._filter_terms(
+            [["full_table_name", "core\\*name"]], partial_filter_names=self.PARTIAL
+        )
+        self.assertEqual(terms, [{"match": {"full_table_name": "core\\*name"}}])
+
+    def test_escapes_survive_lowercasing(self):
+        terms = self._filter_terms(
+            [["full_table_name", "*A\\*B*"]], partial_filter_names=self.PARTIAL
+        )
+        self.assertEqual(
+            terms, [{"wildcard": {"full_table_name": {"value": "*a\\*b*"}}}]
         )
 
     def test_not_enabled_for_other_filters(self):
@@ -74,7 +92,7 @@ class MatchFiltersPartialTestCase(TestCase):
 
     def test_too_few_literals_is_not_partial(self):
         # a bare wildcard would scan the whole term dictionary
-        for value in ["*", "**", "*a*", "*.*", "*ab*", "*a?b*"]:
+        for value in ["*", "**", "*a*", "*.*", "*ab*", "*a?b*", "*\\*b*"]:
             terms = self._filter_terms(
                 [["full_table_name", value]], partial_filter_names=self.PARTIAL
             )

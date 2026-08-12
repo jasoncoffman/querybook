@@ -5,6 +5,10 @@ import AsyncSelect, { Props as AsyncProps } from 'react-select/async';
 import AsyncCreatableSelect from 'react-select/async-creatable';
 
 import {
+    MIN_PARTIAL_NAME_LENGTH,
+    toContainsPattern,
+} from 'lib/elasticsearch/wildcard';
+import {
     asyncReactSelectStyles,
     makeReactSelectStyle,
 } from 'lib/utils/react-select';
@@ -17,11 +21,6 @@ import { HoverIconTag } from 'ui/Tag/HoverIconTag';
 
 import './TableSelect.scss';
 
-// Keep in sync with MIN_PARTIAL_FILTER_LITERALS in
-// server/lib/elasticsearch/query_utils.py. Shorter values are ignored by the
-// server, so offering them here would silently return no results.
-const MIN_PARTIAL_NAME_LENGTH = 3;
-
 interface ITableSelectProps {
     tableNames: string[];
     onTableNamesChange: (tableNames: string[]) => void;
@@ -32,9 +31,9 @@ interface ITableSelectProps {
     // remove the selected table name after select
     clearAfterSelect?: boolean;
 
-    // allow entering a partial name, such as "world", instead of only
-    // picking from the autocomplete results. The entered text is wrapped
-    // in wildcards before being sent as a filter value.
+    // allow entering a partial name, such as "world", instead of only picking
+    // from the autocomplete results. The entered text is sent as a "contains"
+    // pattern, so any wildcard the user types is matched literally.
     allowPartialName?: boolean;
 }
 
@@ -143,15 +142,12 @@ export const TableSelect: React.FunctionComponent<ITableSelectProps> = ({
                                     onTableNamesChange([]);
                                     return;
                                 }
-                                // a created option is a partial name, so make the
-                                // wildcards explicit rather than having the server
-                                // guess intent from the text
-                                const isPartial =
-                                    option.__isNew__ &&
-                                    !newTableName.includes('*');
+                                // a created option is always a "contains" match,
+                                // so send it as a wildcard pattern rather than
+                                // having the server guess intent from the text
                                 const newTableNames = tableNames.concat(
-                                    isPartial
-                                        ? `*${newTableName}*`
+                                    option.__isNew__
+                                        ? toContainsPattern(newTableName)
                                         : newTableName
                                 );
                                 onTableNamesChange(newTableNames);

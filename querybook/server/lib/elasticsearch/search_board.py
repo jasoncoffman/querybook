@@ -6,6 +6,10 @@ from lib.elasticsearch.query_utils import (
     combine_keyword_and_filter_query,
 )
 
+# full_table_name is a keyword field, so it keeps punctuation and can be
+# matched partially, e.g. "*world*"
+PARTIAL_FILTERS = ["full_table_name"]
+
 
 def _match_board_fields(fields):
     search_fields = []
@@ -44,7 +48,7 @@ def construct_board_query(
         search_fields=_match_board_fields(fields),
     )
 
-    search_filter = match_filters(filters)
+    search_filter = match_filters(filters, partial_filter_names=PARTIAL_FILTERS)
     search_filter.setdefault("filter", {}).setdefault("bool", {}).setdefault(
         "must", []
     ).append({"bool": {"should": _board_access_terms(uid)}})

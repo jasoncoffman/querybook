@@ -29,7 +29,38 @@ def match_any_field(keywords="", search_fields=[]):
     return query
 
 
-def _make_singular_filter(filter_name: str, filter_val, and_filter_names: List[str]):
+# A partial value must contain at least this many literal characters. Wildcard
+# queries scan the field's term dictionary, so a pattern like "*" alone would
+# match every term for no useful result.
+MIN_PARTIAL_FILTER_LITERALS = 2
+
+
+def _is_partial_filter_value(filter_val: str) -> bool:
+    """Whether a filter value asks for partial matching, indicated by an explicit
+    "*" (e.g. "*world*"). Callers building a value from user input are expected to
+    add the wildcards, so intent is never inferred from the text itself."""
+    if not isinstance(filter_val, str) or "*" not in filter_val:
+        return False
+    literals = filter_val.replace("*", "").replace("?", "")
+    return len(literals) >= MIN_PARTIAL_FILTER_LITERALS
+
+
+def _make_partial_filter(filter_name: str, filter_val: str):
+    """Create a wildcard filter for a partially specified value.
+
+    Wildcard queries are not analyzed, so the value is lowercased here to match
+    the terms produced by the field's case_insensitive normalizer.
+    """
+    pattern = filter_val.lower().replace("\\", "\\\\").replace("?", "\\?")
+    return {"wildcard": {filter_name: {"value": pattern}}}
+
+
+def _make_singular_filter(
+    filter_name: str,
+    filter_val,
+    and_filter_names: List[str],
+    partial_filter_names: List[str] = [],
+):
     """Create a elasticsearch filter for a single
        filter_name, filter_val pair. Note filter_val can
        be a list and if the filter_name is in and_filter_names,
@@ -40,21 +71,31 @@ def _make_singular_filter(filter_name: str, filter_val, and_filter_names: List[s
         filter_name (str): Name of filter
         filter_val (str | str[]): Value of filter
         and_filter_names (List[str]): list of filter names that should use AND instead of OR
+        partial_filter_names (List[str]): list of filter names that allow partial
+            (wildcard) values in addition to exact ones
 
     Returns:
         Dict: Valid elasticsearch filter params
     """
     if isinstance(filter_val, list):
         filters = [
-            _make_singular_filter(filter_name, val, and_filter_names)
+            _make_singular_filter(
+                filter_name, val, and_filter_names, partial_filter_names
+            )
             for val in filter_val
         ]
         query_type = "must" if filter_name in and_filter_names else "should"
         return {"bool": {query_type: filters}}
+    if filter_name in partial_filter_names and _is_partial_filter_value(filter_val):
+        return _make_partial_filter(filter_name, filter_val)
     return {"match": {filter_name: filter_val}}
 
 
-def match_filters(filters: List[Tuple[str, str]], and_filter_names: List[str] = []):
+def match_filters(
+    filters: List[Tuple[str, str]],
+    and_filter_names: List[str] = [],
+    partial_filter_names: List[str] = [],
+):
     if not filters:
         return {}
 
@@ -81,7 +122,9 @@ def match_filters(filters: List[Tuple[str, str]], and_filter_names: List[str] = 
             duration_filter["lte"] = filter_val
         else:
             filter_terms.append(
-                _make_singular_filter(filter_name, filter_val, and_filter_names)
+                _make_singular_filter(
+                    filter_name, filter_val, and_filter_names, partial_filter_names
+                )
             )
 
     filter_query = {"filter": {"bool": {"must": filter_terms}}}

@@ -11,6 +11,10 @@ LOG = get_logger(__file__)
 
 ES_CONFIG = get_config_value("elasticsearch")
 
+# Upper bound on how long a search may run in the cluster. Without it a slow
+# query (e.g. a broad wildcard filter) holds a web worker until ES finishes.
+SEARCH_TIMEOUT = "10s"
+
 
 @in_mem_memoized(3600)
 def get_hosted_es():
@@ -59,7 +63,9 @@ def _parse_results(results, get_count):
 def get_matching_objects(query: Union[str, Dict], index_name, get_count=False):
     result = None
     try:
-        result = get_hosted_es().search(index=index_name, body=query)
+        result = get_hosted_es().search(
+            index=index_name, body=query, timeout=SEARCH_TIMEOUT
+        )
     except Exception as e:
         LOG.warning("Got ElasticSearch exception: \n " + str(e))
 

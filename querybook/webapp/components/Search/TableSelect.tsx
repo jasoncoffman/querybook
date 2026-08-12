@@ -2,6 +2,7 @@ import React, { useCallback, useState } from 'react';
 import { useSelector } from 'react-redux';
 import Select from 'react-select';
 import AsyncSelect, { Props as AsyncProps } from 'react-select/async';
+import AsyncCreatableSelect from 'react-select/async-creatable';
 
 import {
     asyncReactSelectStyles,
@@ -25,6 +26,11 @@ interface ITableSelectProps {
 
     // remove the selected table name after select
     clearAfterSelect?: boolean;
+
+    // allow entering a partial name, such as "world", instead of only
+    // picking from the autocomplete results. The entered text is wrapped
+    // in wildcards before being sent as a filter value.
+    allowPartialName?: boolean;
 }
 
 export const TableSelect: React.FunctionComponent<ITableSelectProps> = ({
@@ -33,6 +39,7 @@ export const TableSelect: React.FunctionComponent<ITableSelectProps> = ({
     usePortalMenu = true,
     selectProps = {},
     clearAfterSelect = false,
+    allowPartialName = false,
 }) => {
     const queryMetastoreById = useSelector(
         (state: IStoreState) => state.dataSources.queryMetastoreById
@@ -63,8 +70,8 @@ export const TableSelect: React.FunctionComponent<ITableSelectProps> = ({
                     tableNames.indexOf(`${result.schema}.${result.name}`) === -1
             );
             const tableNameOptions = filteredTableNames.map(
-                ({ id, schema, name }) => ({
-                    value: id,
+                ({ schema, name }) => ({
+                    value: `${schema}.${name}`,
                     label: `${schema}.${name}`,
                 })
             );
@@ -98,28 +105,64 @@ export const TableSelect: React.FunctionComponent<ITableSelectProps> = ({
                 </>
             )}
             <AccentText>
-                <AsyncSelect
-                    styles={tableReactSelectStyle}
-                    placeholder={'search table name'}
-                    onChange={(option: any) => {
-                        const newTableName = option?.label ?? null;
-                        if (newTableName == null) {
-                            onTableNamesChange([]);
-                            return;
-                        }
-                        const newTableNames = tableNames.concat(newTableName);
-                        onTableNamesChange(newTableNames);
-                    }}
-                    loadOptions={loadOptions}
-                    defaultOptions={[]}
-                    inputValue={searchText}
-                    onInputChange={(text) => setSearchText(text)}
-                    noOptionsMessage={() =>
-                        searchText ? 'No table found.' : null
-                    }
-                    {...asyncSelectProps}
-                    {...selectProps}
-                />
+                {(() => {
+                    const SelectComponent = allowPartialName
+                        ? AsyncCreatableSelect
+                        : AsyncSelect;
+                    const partialNameProps = allowPartialName
+                        ? {
+                              // loadOptions runs on every keystroke, and react-select
+                              // hides the create option while loading by default
+                              allowCreateWhileLoading: true,
+                              createOptionPosition: 'first' as const,
+                              formatCreateLabel: (input: string) =>
+                                  `Match table names containing "${input}"`,
+                              isValidNewOption: (input: string) =>
+                                  input.trim().length > 0,
+                          }
+                        : {};
+                    return (
+                        <SelectComponent
+                            styles={tableReactSelectStyle}
+                            placeholder={
+                                allowPartialName
+                                    ? 'search table name or partial name'
+                                    : 'search table name'
+                            }
+                            onChange={(option: any) => {
+                                // read value, not label: for a created option the
+                                // label is the "Match table names containing" text
+                                const newTableName = option?.value ?? null;
+                                if (newTableName == null) {
+                                    onTableNamesChange([]);
+                                    return;
+                                }
+                                // a created option is a partial name, so make the
+                                // wildcards explicit rather than having the server
+                                // guess intent from the text
+                                const isPartial =
+                                    option.__isNew__ &&
+                                    !newTableName.includes('*');
+                                const newTableNames = tableNames.concat(
+                                    isPartial
+                                        ? `*${newTableName}*`
+                                        : newTableName
+                                );
+                                onTableNamesChange(newTableNames);
+                            }}
+                            loadOptions={loadOptions}
+                            defaultOptions={[]}
+                            inputValue={searchText}
+                            onInputChange={(text) => setSearchText(text)}
+                            noOptionsMessage={() =>
+                                searchText ? 'No table found.' : null
+                            }
+                            {...partialNameProps}
+                            {...asyncSelectProps}
+                            {...selectProps}
+                        />
+                    );
+                })()}
             </AccentText>
             {tableNames.length ? (
                 <div className="mt8">

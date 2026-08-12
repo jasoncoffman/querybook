@@ -6,6 +6,10 @@ from lib.elasticsearch.query_utils import (
 )
 
 FILTERS_TO_AND = ["full_table_name"]
+# full_table_name is a keyword field, so it keeps punctuation that the
+# query_text analyzer would strip. This lets users filter by a partial name
+# such as "*world*"
+PARTIAL_FILTERS = ["full_table_name"]
 
 
 def _query_access_terms(user_id):
@@ -59,7 +63,11 @@ def construct_query_search_query(
     else:
         keywords_query = {"match_all": {}}
 
-    search_filter = match_filters(filters, and_filter_names=FILTERS_TO_AND)
+    search_filter = match_filters(
+        filters,
+        and_filter_names=FILTERS_TO_AND,
+        partial_filter_names=PARTIAL_FILTERS,
+    )
 
     if uid:
         search_filter.setdefault("filter", {}).setdefault("bool", {}).setdefault(

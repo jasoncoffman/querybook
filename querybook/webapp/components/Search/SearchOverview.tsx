@@ -636,6 +636,7 @@ export const SearchOverview: React.FC<ISearchOverviewProps> = ({
                 autoFocus: true,
             }}
             clearAfterSelect
+            allowPartialName
         />
     );
 
